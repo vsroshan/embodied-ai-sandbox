@@ -65,7 +65,7 @@ The project will evolve through the following experimental stages:
 Clone the repository:
 
 ```bash
-git clone https://github.com/YOUR-USERNAME/embodied-ai-sandbox.git
+git clone https://github.com/vsroshan/embodied-ai-sandbox.git
 cd embodied-ai-sandbox
 ```
 
