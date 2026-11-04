@@ -34,7 +34,7 @@ The project will evolve through the following experimental stages:
 - [x] Install and configure MuJoCo.
 - [x] Launch the native 3D simulation viewer.
 - [x] Create an initial physics environment with objects and a target zone.
-- [ ] Implement environment-state observation.
+- [x] Implement environment-state observation.
 - [ ] Introduce goal specification and task evaluation.
 - [ ] Develop an initial autonomous control mechanism.
 - [ ] Implement object manipulation and target-reaching tasks.
