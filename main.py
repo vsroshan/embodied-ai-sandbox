@@ -1,3 +1,4 @@
+
 import time
 
 import mujoco
@@ -15,14 +16,12 @@ MODEL_XML = """
     </visual>
 
     <worldbody>
-        <!-- Ground -->
         <geom name="ground"
               type="plane"
               pos="0 0 0"
               size="5 5 0.1"
               rgba="0.75 0.75 0.75 1"/>
 
-        <!-- Red cube -->
         <body name="red_cube" pos="-0.6 0 0.08">
             <freejoint/>
             <geom name="red_cube_geom"
@@ -32,7 +31,6 @@ MODEL_XML = """
                   rgba="0.9 0.1 0.1 1"/>
         </body>
 
-        <!-- Blue cube -->
         <body name="blue_cube" pos="0 0 0.08">
             <freejoint/>
             <geom name="blue_cube_geom"
@@ -42,7 +40,6 @@ MODEL_XML = """
                   rgba="0.1 0.3 0.9 1"/>
         </body>
 
-        <!-- Green cube -->
         <body name="green_cube" pos="0.6 0 0.08">
             <freejoint/>
             <geom name="green_cube_geom"
@@ -52,7 +49,6 @@ MODEL_XML = """
                   rgba="0.1 0.8 0.2 1"/>
         </body>
 
-        <!-- Target zone -->
         <geom name="target_box"
               type="box"
               pos="0 0.65 0.06"
@@ -63,23 +59,86 @@ MODEL_XML = """
 """
 
 
+OBJECT_NAMES = ["red_cube", "blue_cube", "green_cube"]
+
+
+def observe_environment(model, data):
+    """Read the current simulated positions of objects."""
+
+    observations = {}
+
+    for name in OBJECT_NAMES:
+        body_id = mujoco.mj_name2id(
+            model,
+            mujoco.mjtObj.mjOBJ_BODY,
+            name
+        )
+
+        position = data.xpos[body_id].copy()
+
+        observations[name] = position
+
+    target_id = mujoco.mj_name2id(
+        model,
+        mujoco.mjtObj.mjOBJ_GEOM,
+        "target_box"
+    )
+
+    target_position = model.geom_pos[target_id].copy()
+
+    return observations, target_position
+
+
+def print_observations(observations, target_position):
+    """Display the observed environment state."""
+
+    print("\n--- ENVIRONMENT OBSERVATION ---")
+
+    for name, position in observations.items():
+        print(
+            f"{name}: "
+            f"x={position[0]:.3f}, "
+            f"y={position[1]:.3f}, "
+            f"z={position[2]:.3f}"
+        )
+
+    print(
+        "Target:",
+        f"x={target_position[0]:.3f},",
+        f"y={target_position[1]:.3f},",
+        f"z={target_position[2]:.3f}"
+    )
+
+    print("-------------------------------")
+
+
 def main():
     model = mujoco.MjModel.from_xml_string(MODEL_XML)
     data = mujoco.MjData(model)
 
+    # Calculate the initial world-space positions.
+    mujoco.mj_forward(model, data)
+
     print("Embodied AI Sandbox initialized!")
     print(f"MuJoCo version: {mujoco.__version__}")
-    print(f"Number of bodies: {model.nbody}")
-    print("Close the simulation window to exit.")
+
+    observations, target_position = observe_environment(
+        model, data
+    )
+
+    print_observations(observations, target_position)
+
+    print("\nLaunching 3D simulation...")
 
     with mujoco.viewer.launch_passive(model, data) as viewer:
         while viewer.is_running():
             step_start = time.time()
 
             mujoco.mj_step(model, data)
+
+            # Synchronise the viewer with the simulation.
             viewer.sync()
 
-            # Keep simulation speed close to real time.
             elapsed = time.time() - step_start
             remaining = model.opt.timestep - elapsed
 
