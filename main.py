@@ -61,6 +61,12 @@ MODEL_XML = """
 
 OBJECT_NAMES = ["red_cube", "blue_cube", "green_cube"]
 
+# Target half-width is 0.22 m.
+# Cube half-width is 0.08 m.
+# Their footprints overlap when their center separation
+# along both X and Y is at most 0.22 + 0.08 = 0.30 m.
+TARGET_REACH_THRESHOLD = 0.30
+
 
 def observe_environment(model, data):
     """Read the current simulated positions of objects."""
@@ -74,9 +80,7 @@ def observe_environment(model, data):
             name
         )
 
-        position = data.xpos[body_id].copy()
-
-        observations[name] = position
+        observations[name] = data.xpos[body_id].copy()
 
     target_id = mujoco.mj_name2id(
         model,
@@ -89,46 +93,75 @@ def observe_environment(model, data):
     return observations, target_position
 
 
-def print_observations(observations, target_position):
-    """Display the observed environment state."""
+def calculate_distance(position, target_position):
+    """Calculate horizontal XY distance from an object to target."""
 
-    print("\n--- ENVIRONMENT OBSERVATION ---")
+    dx = position[0] - target_position[0]
+    dy = position[1] - target_position[1]
+
+    return (dx ** 2 + dy ** 2) ** 0.5
+
+
+def evaluate_goal(observations, target_position):
+    """Evaluate distances, closest object, and target reach."""
+
+    distances = {}
 
     for name, position in observations.items():
-        print(
-            f"{name}: "
-            f"x={position[0]:.3f}, "
-            f"y={position[1]:.3f}, "
-            f"z={position[2]:.3f}"
+        distances[name] = calculate_distance(
+            position,
+            target_position
         )
 
-    print(
-        "Target:",
-        f"x={target_position[0]:.3f},",
-        f"y={target_position[1]:.3f},",
-        f"z={target_position[2]:.3f}"
-    )
+    closest_object = min(distances, key=distances.get)
 
-    print("-------------------------------")
+    objects_at_target = []
+
+    for name, position in observations.items():
+        dx = abs(position[0] - target_position[0])
+        dy = abs(position[1] - target_position[1])
+
+        # Check whether the cube footprint overlaps the
+        # rectangular target footprint.
+        if (
+            dx <= TARGET_REACH_THRESHOLD
+            and dy <= TARGET_REACH_THRESHOLD
+        ):
+            objects_at_target.append(name)
+
+    return distances, closest_object, objects_at_target
+
+
+def print_evaluation(distances, closest_object, objects_at_target):
+    """Display the goal evaluation results."""
+
+    print("\n--- GOAL EVALUATION ---")
+
+    for name, distance in distances.items():
+        print(f"{name}: {distance:.3f} metres from target")
+
+    print(f"\nClosest object: {closest_object}")
+
+    if objects_at_target:
+        print("Target reached by:", ", ".join(objects_at_target))
+    else:
+        print("Target status: No object has reached the target.")
+
+    print("-----------------------")
 
 
 def main():
     model = mujoco.MjModel.from_xml_string(MODEL_XML)
     data = mujoco.MjData(model)
 
-    # Calculate the initial world-space positions.
     mujoco.mj_forward(model, data)
 
     print("Embodied AI Sandbox initialized!")
     print(f"MuJoCo version: {mujoco.__version__}")
 
-    observations, target_position = observe_environment(
-        model, data
-    )
-
-    print_observations(observations, target_position)
-
     print("\nLaunching 3D simulation...")
+
+    last_evaluation_time = 0
 
     with mujoco.viewer.launch_passive(model, data) as viewer:
         while viewer.is_running():
@@ -136,7 +169,26 @@ def main():
 
             mujoco.mj_step(model, data)
 
-            # Synchronise the viewer with the simulation.
+            current_time = time.time()
+
+            # Evaluate approximately once per second.
+            if current_time - last_evaluation_time >= 1.0:
+                observations, target_position = observe_environment(
+                    model, data
+                )
+
+                distances, closest_object, objects_at_target = (
+                    evaluate_goal(observations, target_position)
+                )
+
+                print_evaluation(
+                    distances,
+                    closest_object,
+                    objects_at_target
+                )
+
+                last_evaluation_time = current_time
+
             viewer.sync()
 
             elapsed = time.time() - step_start
