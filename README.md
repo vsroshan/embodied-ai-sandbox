@@ -35,7 +35,7 @@ The project will evolve through the following experimental stages:
 - [x] Launch the native 3D simulation viewer.
 - [x] Create an initial physics environment with objects and a target zone.
 - [x] Implement environment-state observation.
-- [ ] Introduce goal specification and task evaluation.
+- [x] Introduce goal specification and task evaluation.
 - [ ] Develop an initial autonomous control mechanism.
 - [ ] Implement object manipulation and target-reaching tasks.
 - [ ] Introduce visual perception.
@@ -110,11 +110,15 @@ The emphasis is on understanding how intelligence can translate into actions wit
 
 ## Project Status
 
-**Active Development — Experimental Prototype**
+## Current Status
 
-This repository documents the development process, experiments, implementation decisions, and findings as the project evolves.
+**Active Development — Goal Evaluation Prototype**
 
-The current implementation is a simulated environment. It does not yet represent a complete autonomous agent or a validated real-world robotic system.
+The project currently includes a physics-based simulation environment, simulator-state observation, distance calculations, closest-object identification, and geometric target-reach evaluation.
+
+The next development stage will explore goal-oriented decision-making and action execution.
+
+Autonomous object manipulation and camera-based perception remain future development goals.
 
 ## Author
 
