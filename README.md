@@ -36,7 +36,7 @@ The project will evolve through the following experimental stages:
 - [x] Create an initial physics environment with objects and a target zone.
 - [x] Implement environment-state observation.
 - [x] Introduce goal specification and task evaluation.
-- [ ] Develop an initial autonomous control mechanism.
+- [x] Develop an initial autonomous control mechanism.
 - [ ] Implement object manipulation and target-reaching tasks.
 - [ ] Introduce visual perception.
 - [ ] Explore planning and decision-making.
@@ -119,6 +119,27 @@ The project currently includes a physics-based simulation environment, simulator
 The next development stage will explore goal-oriented decision-making and action execution.
 
 Autonomous object manipulation and camera-based perception remain future development goals.
+4. Goal-Oriented Decision-Making
+
+Implemented an initial rule-based decision-making layer that selects an object based on its relationship to the target.
+
+The decision system can:
+
+Evaluate all available objects using their calculated distances.
+
+Exclude objects that have already reached the target area.
+
+Select the closest eligible object.
+
+Generate a structured decision identifying the selected object.
+
+Provide a reasoning statement explaining the selection.
+
+Recognise when all objects have reached the target and no further selection is required.
+
+The decision-making mechanism is implemented independently of the simulation and observation layers, allowing future control and planning systems to build upon it.
+
+Note: This is a deterministic, rule-based decision policy. It does not yet execute physical actions or autonomously manipulate objects.
 
 ## Author
 
