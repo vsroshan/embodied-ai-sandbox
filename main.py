@@ -1,5 +1,6 @@
 
 import time
+import math
 
 import mujoco
 import mujoco.viewer
@@ -61,15 +62,16 @@ MODEL_XML = """
 
 OBJECT_NAMES = ["red_cube", "blue_cube", "green_cube"]
 
-# Target half-width is 0.22 m.
-# Cube half-width is 0.08 m.
-# Their footprints overlap when their center separation
-# along both X and Y is at most 0.22 + 0.08 = 0.30 m.
 TARGET_REACH_THRESHOLD = 0.30
+
+# Controller parameters
+KP = 8.0
+KD = 2.5
+MAX_FORCE = 3.0
 
 
 def observe_environment(model, data):
-    """Read the current simulated positions of objects."""
+    """Read the current simulated positions."""
 
     observations = {}
 
@@ -94,60 +96,139 @@ def observe_environment(model, data):
 
 
 def calculate_distance(position, target_position):
-    """Calculate horizontal XY distance from an object to target."""
+    """Calculate horizontal distance to the target."""
 
     dx = position[0] - target_position[0]
     dy = position[1] - target_position[1]
 
-    return (dx ** 2 + dy ** 2) ** 0.5
+    return math.sqrt(dx ** 2 + dy ** 2)
 
 
 def evaluate_goal(observations, target_position):
-    """Evaluate distances, closest object, and target reach."""
+    """Evaluate distances and target reach."""
 
     distances = {}
+    objects_at_target = []
 
     for name, position in observations.items():
+
         distances[name] = calculate_distance(
             position,
             target_position
         )
 
-    closest_object = min(distances, key=distances.get)
-
-    objects_at_target = []
-
-    for name, position in observations.items():
         dx = abs(position[0] - target_position[0])
         dy = abs(position[1] - target_position[1])
 
-        # Check whether the cube footprint overlaps the
-        # rectangular target footprint.
         if (
             dx <= TARGET_REACH_THRESHOLD
             and dy <= TARGET_REACH_THRESHOLD
         ):
             objects_at_target.append(name)
 
+    closest_object = min(distances, key=distances.get)
+
     return distances, closest_object, objects_at_target
 
 
-def print_evaluation(distances, closest_object, objects_at_target):
-    """Display the goal evaluation results."""
+def make_decision(distances, objects_at_target):
+    """Select the closest object that has not reached the target."""
 
-    print("\n--- GOAL EVALUATION ---")
+    eligible_objects = {
+        name: distance
+        for name, distance in distances.items()
+        if name not in objects_at_target
+    }
+
+    if not eligible_objects:
+        return {
+            "action": "NO_ACTION_REQUIRED",
+            "selected_object": None,
+            "reason": "All objects have reached the target."
+        }
+
+    selected_object = min(
+        eligible_objects,
+        key=eligible_objects.get
+    )
+
+    return {
+        "action": "MOVE_OBJECT",
+        "selected_object": selected_object,
+        "reason": (
+            f"{selected_object} is the closest object "
+            "that has not reached the target."
+        )
+    }
+
+
+def apply_controller(model, data, selected_object, target_position):
+    """
+    Apply a PD controller to move the selected cube
+    horizontally towards the target.
+    """
+
+    if selected_object is None:
+        return
+
+    body_id = mujoco.mj_name2id(
+        model,
+        mujoco.mjtObj.mjOBJ_BODY,
+        selected_object
+    )
+
+    position = data.xpos[body_id]
+
+    # MuJoCo cvel stores angular velocity first,
+    # followed by linear velocity in world coordinates.
+    velocity = data.cvel[body_id, 3:6]
+
+    error_x = target_position[0] - position[0]
+    error_y = target_position[1] - position[1]
+
+    # PD control: proportional position correction
+    # plus damping to reduce overshoot.
+    force_x = KP * error_x - KD * velocity[0]
+    force_y = KP * error_y - KD * velocity[1]
+
+    # Limit the total horizontal force.
+    force_magnitude = math.sqrt(
+        force_x ** 2 + force_y ** 2
+    )
+
+    if force_magnitude > MAX_FORCE:
+        scale = MAX_FORCE / force_magnitude
+        force_x *= scale
+        force_y *= scale
+
+    # Apply force in the world X and Y directions.
+    data.xfrc_applied[body_id, 3:6] = [
+        force_x,
+        force_y,
+        0.0
+    ]
+
+
+def print_status(distances, closest_object, objects_at_target, decision):
+    """Display evaluation and controller status."""
+
+    print("\n--- ACTION & CONTROL STATUS ---")
 
     for name, distance in distances.items():
-        print(f"{name}: {distance:.3f} metres from target")
+        status = (
+            "AT TARGET"
+            if name in objects_at_target
+            else "NOT AT TARGET"
+        )
+
+        print(f"{name}: {distance:.3f} metres | {status}")
 
     print(f"\nClosest object: {closest_object}")
+    print("Action:", decision["action"])
+    print("Selected object:", decision["selected_object"])
+    print("Reason:", decision["reason"])
 
-    if objects_at_target:
-        print("Target reached by:", ", ".join(objects_at_target))
-    else:
-        print("Target status: No object has reached the target.")
-
-    print("-----------------------")
+    print("--------------------------------")
 
 
 def main():
@@ -158,21 +239,27 @@ def main():
 
     print("Embodied AI Sandbox initialized!")
     print(f"MuJoCo version: {mujoco.__version__}")
+    print("Action and control system ready.")
 
-    print("\nLaunching 3D simulation...")
+    decision = {
+        "action": "NO_ACTION_REQUIRED",
+        "selected_object": None,
+        "reason": "Waiting for initial evaluation."
+    }
 
-    last_evaluation_time = 0
+    last_decision_time = 0
+    last_print_time = 0
 
     with mujoco.viewer.launch_passive(model, data) as viewer:
+
         while viewer.is_running():
+
             step_start = time.time()
-
-            mujoco.mj_step(model, data)
-
             current_time = time.time()
 
-            # Evaluate approximately once per second.
-            if current_time - last_evaluation_time >= 1.0:
+            # Refresh the decision every 0.2 seconds.
+            if current_time - last_decision_time >= 0.2:
+
                 observations, target_position = observe_environment(
                     model, data
                 )
@@ -181,13 +268,46 @@ def main():
                     evaluate_goal(observations, target_position)
                 )
 
-                print_evaluation(
+                decision = make_decision(
                     distances,
-                    closest_object,
                     objects_at_target
                 )
 
-                last_evaluation_time = current_time
+                last_decision_time = current_time
+
+            # Clear previously applied external forces.
+            data.xfrc_applied[:] = 0
+
+            # Execute the current decision using the controller.
+            apply_controller(
+                model,
+                data,
+                decision["selected_object"],
+                target_position
+            )
+
+            # Advance the physics simulation.
+            mujoco.mj_step(model, data)
+
+            # Print status approximately once per second.
+            if current_time - last_print_time >= 1.0:
+
+                observations, target_position = observe_environment(
+                    model, data
+                )
+
+                distances, closest_object, objects_at_target = (
+                    evaluate_goal(observations, target_position)
+                )
+
+                print_status(
+                    distances,
+                    closest_object,
+                    objects_at_target,
+                    decision
+                )
+
+                last_print_time = current_time
 
             viewer.sync()
 
@@ -200,3 +320,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
