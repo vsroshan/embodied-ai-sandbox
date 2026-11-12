@@ -37,7 +37,7 @@ The project will evolve through the following experimental stages:
 - [x] Implement environment-state observation.
 - [x] Introduce goal specification and task evaluation.
 - [x] Develop an initial autonomous control mechanism.
-- [ ] Implement object manipulation and target-reaching tasks.
+- [x] Implement object manipulation and target-reaching tasks.
 - [ ] Introduce visual perception.
 - [ ] Explore planning and decision-making.
 - [ ] Experiment with disturbances, failure detection, and recovery.
